@@ -1,59 +1,31 @@
-use std::{env, error::Error, ffi::OsStr, fs, io, path::Path};
+mod io;
+
+use std::{
+    env,
+    error::Error,
+    path::{Path, PathBuf},
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let Some(path) = args.get(1) else {
-        panic!("No source file path specified.")
+    match try_main(&args) {
+        Ok(output_path) => println!("Successfully converted file to {output_path:?}"),
+        Err(err) => eprintln!("Error! Something went wrong:\n{err}"),
     };
-
-    match handle_file(path) {
-        Ok(()) => println!("Successfully converted file to HTML."),
-        Err(err) => eprintln!("Error! Could not convert '{path}':\n{err}"),
-    }
 }
 
-fn handle_file(path: &str) -> Result<(), Box<dyn Error>> {
+fn try_main(args: &[String]) -> Result<PathBuf, Box<dyn Error>> {
+    let path = args.get(1).ok_or("No Source file path specified.")?;
     let path = Path::new(path);
 
-    let (source_parent, source_name) = get_file_parent_and_name(path)?;
-    let source_contents = fs::read_to_string(path)?;
+    io::validate_file(path)?;
 
-    let dest_name = format!("{}.html", source_name.to_str().unwrap_or("output.txt"));
+    let file_contents = io::read_file(path)?;
 
-    fs::write(source_parent.join(dest_name), source_contents)?;
+    let output_path = path.with_extension("html");
 
-    Ok(())
-}
+    io::write_file(output_path.as_path(), file_contents)?;
 
-fn get_file_parent_and_name(path: &Path) -> io::Result<(&Path, &OsStr)> {
-    let Some(ext) = path.extension() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Specified file does not have an extension",
-        ));
-    };
-
-    if ext != "md" {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Specified file must be a .md file.",
-        ));
-    }
-
-    let Some(file_parent) = path.parent() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Invalid path to file.",
-        ));
-    };
-
-    let Some(file_name) = path.file_stem() else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "No valid file name found.",
-        ));
-    };
-
-    Ok((file_parent, file_name))
+    Ok(output_path)
 }
